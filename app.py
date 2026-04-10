@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from pathlib import Path
-
+ 
 from readers.excel_reader import read_excel
 from readers.xliff_reader import read_xliff
 from readers.tmx_reader import read_tmx
@@ -16,14 +16,14 @@ from rules.encoding import check_encoding
 from rules.style_guide import check_style_guide, get_default_punct_rules
 from rules.length import check_length
 from exporters.export import export_excel, export_csv
-
+ 
 st.set_page_config(page_title="Translation QA Tool", page_icon="🔍", layout="wide")
 st.markdown("""
 <style>
 div[data-testid="stMetric"] { background:#f8f9fa; border-radius:10px; padding:10px 16px; }
 </style>
 """, unsafe_allow_html=True)
-
+ 
 # ── Session state ────────────────────────────────────────────────────
 if "glossary" not in st.session_state:
     st.session_state.glossary = [
@@ -42,22 +42,22 @@ if "style_guide" not in st.session_state:
 if "results"     not in st.session_state: st.session_state.results     = []
 if "raw_df"      not in st.session_state: st.session_state.raw_df      = None
 if "col_mapping" not in st.session_state: st.session_state.col_mapping = {}
-
+ 
 # ── Header ───────────────────────────────────────────────────────────
 st.title("🔍 Translation QA Tool")
 st.caption("รองรับ .xlsx · .xliff · .tmx | ตรวจสอบคุณภาพงานแปลอัตโนมัติ")
 st.divider()
-
+ 
 tab_qa, tab_glossary, tab_style, tab_history = st.tabs(
     ["QA Check", "Glossary", "Style Guide", "History"]
 )
-
+ 
 # ════════════════════════════════════════════════════════════════════
 # TAB 1 — QA CHECK
 # ════════════════════════════════════════════════════════════════════
 with tab_qa:
     col_left, col_right = st.columns([1, 3], gap="large")
-
+ 
     with col_left:
         st.subheader("อัปโหลดไฟล์")
         uploaded = st.file_uploader(
@@ -65,12 +65,12 @@ with tab_qa:
             type=["xlsx", "xliff", "tmx"],
             help="รองรับ .xlsx, .xliff, .tmx",
         )
-
+ 
         # ── Column picker (shown after upload) ───────────────────────
         if uploaded:
             st.success(f"✅ {uploaded.name}")
             ext = Path(uploaded.name).suffix.lower()
-
+ 
             # Load raw df only once per file
             if (st.session_state.raw_df is None or
                     st.session_state.get("last_file") != uploaded.name):
@@ -87,21 +87,21 @@ with tab_qa:
                 st.session_state.raw_df      = raw_df
                 st.session_state.col_mapping = auto_map
                 st.session_state.last_file   = uploaded.name
-
+ 
             raw_df  = st.session_state.raw_df
             mapping = st.session_state.col_mapping
-
+ 
             # raw_df may be None if reading failed
             if raw_df is None:
                 st.error("อ่านไฟล์ไม่ได้ กรุณาตรวจสอบรูปแบบไฟล์")
                 st.stop()
-
+ 
             if not raw_df.empty:
                 all_cols = list(raw_df.columns)
-
+ 
                 st.subheader("คอลัมน์")
                 st.caption(f"ตรวจพบโดย: **{mapping.get('method','—')}**")
-
+ 
                 # Score table — all_scores is {col: {thai_ratio, avg_len, is_text}}
                 scores = mapping.get("all_scores", {})
                 if scores:
@@ -125,10 +125,10 @@ with tab_qa:
                             "text col":   "✅" if is_txt else "—",
                         })
                     st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
-
+ 
                 auto_src = mapping.get("source_col") or all_cols[0]
                 auto_tgt = mapping.get("target_col") or (all_cols[1] if len(all_cols)>1 else all_cols[0])
-
+ 
                 sel_src = st.selectbox(
                     "คอลัมน์ต้นฉบับ (Source)",
                     all_cols,
@@ -139,7 +139,7 @@ with tab_qa:
                     all_cols,
                     index=all_cols.index(auto_tgt) if auto_tgt in all_cols else min(1, len(all_cols)-1),
                 )
-
+ 
         st.subheader("QA Rules")
         rule_missing     = st.toggle("Missing translation",        value=True)
         rule_placeholder = st.toggle("Placeholder  {x} %s <tag>", value=True)
@@ -149,7 +149,7 @@ with tab_qa:
         rule_encoding    = st.toggle("Font & Encoding",            value=True)
         rule_style       = st.toggle("Style guide",                value=True)
         rule_length      = st.toggle("Length check",               value=False)
-
+ 
         st.subheader("ระดับความรุนแรง")
         st.markdown("""
 - 🔴 **Critical** — ห้ามผ่านเด็ดขาด
@@ -158,23 +158,23 @@ with tab_qa:
 - 🟢 **Pass** — ผ่าน
         """)
         run = st.button("▶ รัน QA", type="primary", use_container_width=True)
-
+ 
     # ── Right panel ──────────────────────────────────────────────────
     with col_right:
         if run and uploaded and st.session_state.raw_df is not None:
             raw_df = st.session_state.raw_df
-
+ 
             # Build working df from user-selected columns
             df = pd.DataFrame({
                 "source": raw_df[sel_src].astype(str).fillna(""),
                 "target": raw_df[sel_tgt].astype(str).fillna(""),
             })
-
+ 
             st.info(
                 f"ใช้คอลัมน์: **{sel_src}** (ต้นฉบับ)  →  **{sel_tgt}** (บทแปล) "
                 f"| {len(df)} segments"
             )
-
+ 
             all_issues = []
             with st.spinner("กำลังตรวจสอบ..."):
                 if rule_missing:     all_issues += check_missing(df)
@@ -185,7 +185,7 @@ with tab_qa:
                 if rule_encoding:    all_issues += check_encoding(df, st.session_state.style_guide)
                 if rule_style:       all_issues += check_style_guide(df, st.session_state.style_guide)
                 if rule_length:      all_issues += check_length(df, st.session_state.style_guide)
-
+ 
             flagged = {i["row"] for i in all_issues}
             for idx in range(len(df)):
                 if idx not in flagged:
@@ -195,13 +195,13 @@ with tab_qa:
                         "target": df.iloc[idx]["target"],
                         "rule": "—", "severity": "Pass", "message": "—",
                     })
-
+ 
             all_issues.sort(key=lambda x: (
                 {"Critical":0,"Major":1,"Minor":2,"Pass":3}.get(x["severity"],4),
                 x["row"]
             ))
             st.session_state.results = all_issues
-
+ 
         if st.session_state.results:
             results = st.session_state.results
             total   = len(results)
@@ -209,7 +209,7 @@ with tab_qa:
             n_minor = sum(1 for r in results if r["severity"]=="Minor")
             n_major = sum(1 for r in results if r["severity"]=="Major")
             n_crit  = sum(1 for r in results if r["severity"]=="Critical")
-
+ 
             c1,c2,c3,c4,c5 = st.columns(5)
             c1.metric("ทั้งหมด",      total)
             c2.metric("✅ Pass",      n_pass)
@@ -217,14 +217,14 @@ with tab_qa:
             c4.metric("🟠 Major",     n_major)
             c5.metric("🔴 Critical",  n_crit)
             st.divider()
-
+ 
             filter_sev = st.multiselect(
                 "กรองตามระดับ",
                 ["Critical","Major","Minor","Pass"],
                 default=["Critical","Major","Minor"],
             )
             filtered = [r for r in results if r["severity"] in filter_sev]
-
+ 
             ex1, ex2, _ = st.columns([1,1,5])
             df_out = pd.DataFrame(filtered)
             with ex1:
@@ -234,7 +234,7 @@ with tab_qa:
             with ex2:
                 st.download_button("⬇ Export CSV", data=export_csv(df_out),
                     file_name="qa_results.csv", mime="text/csv")
-
+ 
             SEV = {"Critical":"🔴","Major":"🟠","Minor":"🟡","Pass":"🟢"}
             for r in filtered:
                 with st.container():
@@ -246,17 +246,17 @@ with tab_qa:
                     c[4].markdown(f"{SEV.get(r['severity'],'')} **{r['severity']}**")
                     c[5].write(r.get("message",""))
                 st.markdown("<hr style='margin:4px 0;border-color:#eee;'>", unsafe_allow_html=True)
-
+ 
         elif not uploaded:
             st.info("อัปโหลดไฟล์งานแปลทางซ้าย แล้วกด **รัน QA** เพื่อเริ่มตรวจสอบ")
-
+ 
 # ════════════════════════════════════════════════════════════════════
 # TAB 2 — GLOSSARY
 # ════════════════════════════════════════════════════════════════════
 with tab_glossary:
     st.subheader("จัดการ Glossary")
     st.caption("รองรับ .xlsx · .xliff · .tmx · .csv")
-
+ 
     gfile = st.file_uploader(
         "Import Glossary",
         type=["xlsx","xls","csv","xliff","xlf","tmx"],
@@ -269,7 +269,7 @@ with tab_glossary:
             st.session_state.glossary = entries
             st.success(f"นำเข้า {len(entries)} รายการจาก {gfile.name} สำเร็จ")
         else:         st.warning("ไม่พบรายการใน Glossary")
-
+ 
     edited = st.data_editor(
         pd.DataFrame(st.session_state.glossary),
         num_rows="dynamic",
@@ -285,29 +285,29 @@ with tab_glossary:
     if st.button("💾 บันทึก Glossary"):
         st.session_state.glossary = edited.to_dict("records")
         st.success("บันทึกแล้ว")
-
+ 
     if st.session_state.glossary:
         gcsv = pd.DataFrame(st.session_state.glossary).to_csv(index=False).encode("utf-8-sig")
         st.download_button("⬇ Export Glossary CSV", data=gcsv,
                            file_name="glossary.csv", mime="text/csv")
-
+ 
 # ════════════════════════════════════════════════════════════════════
 # TAB 3 — STYLE GUIDE
 # ════════════════════════════════════════════════════════════════════
 with tab_style:
     st.subheader("Style Guide Settings")
     sg = st.session_state.style_guide
-
+ 
     st.markdown("### เครื่องหมายวรรคตอน (Punctuation)")
     st.caption("เลือกว่าจะ อนุญาต หรือ ห้าม แต่ละเครื่องหมายในคำแปลภาษาไทย")
-
+ 
     punct_rules  = sg.get("punctuation_rules", get_default_punct_rules())
     updated_rules = []
     h1,h2,h3 = st.columns([2.5,1.2,1.5])
     h1.markdown("**เครื่องหมาย**")
     h2.markdown("**อนุญาต**")
     h3.markdown("**ระดับถ้าผิด**")
-
+ 
     for i, rule in enumerate(punct_rules):
         c1,c2,c3 = st.columns([2.5,1.2,1.5])
         label = c1.text_input(f"l{i}", value=rule["label"],
@@ -318,7 +318,7 @@ with tab_style:
                              index=opts.index(rule.get("severity","Minor")),
                              label_visibility="collapsed", key=f"psev_{i}")
         updated_rules.append({"char":rule["char"],"label":label,"allow":allow,"severity":sev})
-
+ 
     with st.expander("➕ เพิ่มเครื่องหมายใหม่"):
         nc1,nc2,nc3,nc4 = st.columns([1,2,1,1.5])
         new_char  = nc1.text_input("ตัวอักษร", placeholder="เช่น /", key="new_char")
@@ -329,7 +329,7 @@ with tab_style:
             updated_rules.append({"char":new_char,"label":new_label or new_char,
                                    "allow":new_allow,"severity":new_sev})
             st.success(f"เพิ่ม '{new_char}' แล้ว")
-
+ 
     st.divider()
     ca, cb = st.columns(2)
     with ca:
@@ -343,18 +343,18 @@ with tab_style:
             ["UTF-8","TIS-620","UTF-16"],
             index=["UTF-8","TIS-620","UTF-16"].index(sg.get("encoding","UTF-8")))
         sg["thai_font"] = st.text_input("Thai font", value=sg.get("thai_font","Sarabun"))
-
+ 
     st.markdown("### Length Check")
     sg["max_length_ratio"] = st.slider(
         "อัตราส่วนความยาว target/source สูงสุด",
         min_value=1.0, max_value=10.0,
         value=float(sg.get("max_length_ratio",3.0)), step=0.5)
-
+ 
     if st.button("💾 บันทึก Style Guide", type="primary"):
         sg["punctuation_rules"] = updated_rules
         st.session_state.style_guide = sg
         st.success("บันทึก Style Guide แล้ว")
-
+ 
 # ════════════════════════════════════════════════════════════════════
 # TAB 4 — HISTORY
 # ════════════════════════════════════════════════════════════════════
@@ -371,3 +371,4 @@ with tab_history:
         st.dataframe(pd.DataFrame(results), use_container_width=True)
     else:
         st.info("ยังไม่มีประวัติ — รัน QA ก่อนในแท็บ 'QA Check'")
+ 
