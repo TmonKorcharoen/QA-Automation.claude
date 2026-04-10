@@ -95,7 +95,7 @@ with tab_qa:
             if raw_df is None:
                 st.error("อ่านไฟล์ไม่ได้ กรุณาตรวจสอบรูปแบบไฟล์")
                 st.stop()
-
+                
             if not raw_df.empty:
                 all_cols = list(raw_df.columns)
 
