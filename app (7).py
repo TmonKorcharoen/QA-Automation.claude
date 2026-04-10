@@ -91,22 +91,40 @@ with tab_qa:
             raw_df  = st.session_state.raw_df
             mapping = st.session_state.col_mapping
 
-            if raw_df is not None and not raw_df.empty:
+            # raw_df may be None if reading failed
+            if raw_df is None:
+                st.error("อ่านไฟล์ไม่ได้ กรุณาตรวจสอบรูปแบบไฟล์")
+                st.stop()
+
+            if not raw_df.empty:
                 all_cols = list(raw_df.columns)
 
                 st.subheader("คอลัมน์")
                 st.caption(f"ตรวจพบโดย: **{mapping.get('method','—')}**")
 
-                # Score bar per column
+                # Score table — all_scores is {col: {thai_ratio, avg_len, is_text}}
                 scores = mapping.get("all_scores", {})
                 if scores:
-                    score_df = pd.DataFrame([
-                        {"คอลัมน์": c,
-                         "Thai ratio": f"{v*100:.0f}%",
-                         "ภาษา": "Thai" if v>0.5 else ("English" if v<0.1 else "Mixed")}
-                        for c, v in scores.items()
-                    ])
-                    st.dataframe(score_df, hide_index=True, use_container_width=True)
+                    rows = []
+                    for c, v in scores.items():
+                        # support both old float format and new dict format
+                        if isinstance(v, dict):
+                            thai_r = v.get("thai_ratio", 0)
+                            avg_l  = v.get("avg_len", 0)
+                            is_txt = v.get("is_text", True)
+                        else:
+                            thai_r = float(v)
+                            avg_l  = 0
+                            is_txt = True
+                        lang = "Thai" if thai_r > 0.5 else ("English" if thai_r < 0.1 else "Mixed")
+                        rows.append({
+                            "คอลัมน์":    c,
+                            "Thai ratio": f"{thai_r*100:.0f}%",
+                            "ภาษา":       lang,
+                            "avg length": f"{avg_l:.0f} chars",
+                            "text col":   "✅" if is_txt else "—",
+                        })
+                    st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
 
                 auto_src = mapping.get("source_col") or all_cols[0]
                 auto_tgt = mapping.get("target_col") or (all_cols[1] if len(all_cols)>1 else all_cols[0])
